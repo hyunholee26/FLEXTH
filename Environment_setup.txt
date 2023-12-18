@@ -1,0 +1,47 @@
+If you are not familiar with python/conda these steps can be used as an example to 
+set up a conda environment from scratch to use FLEXTH:
+
+
+
+1. download and install miniconda (light version of conda)
+   (https://docs.conda.io/projects/miniconda/en/latest/miniconda-install.html)
+
+
+
+2. open the conda command prompt and run: 
+
+  >>> conda config --add channels conda-forge 
+  >>> conda config --set channel_priority strict
+
+
+
+3. from the conda command prompt install mamba
+
+  >>> conda install mamba
+
+
+
+4. install spider 
+
+  >>> mamba install spyder
+
+
+
+5. create a suitable environment named "myenv" where to use FLEXTH
+
+  >>> mamba create -n myenv python=3.12 numpy scipy xarray rasterio astropy opencv gdal spyder-kernels
+
+
+
+6. run spyder from the base environment
+
+  >>> spyder
+
+
+7. open the script and change the spyder kernel to the one corresponding to the new environment:
+
+  go to: tools>preferences>python interpreter; choose " use the following python interpreter" and browse to python.exe 
+  inside the folder where the new environment was created (e.g. : " C:\Users\Tom\miniconda3\envs\python_312\python.exe")
+
+
+8. done  
