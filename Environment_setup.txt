@@ -29,7 +29,7 @@ set up a conda environment from scratch to use FLEXTH:
 
 5. create a suitable environment named "myenv" where to use FLEXTH
 
-  >>> mamba create -n myenv python=3.12 numpy scipy xarray rasterio astropy opencv gdal spyder-kernels
+  >>> mamba create -n myenv python=3.12 numpy scipy xarray rasterio astropy opencv gdal scikit-image spyder-kernels
 
 
 
