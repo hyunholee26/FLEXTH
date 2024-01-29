@@ -1,15 +1,17 @@
 Wherever you like create two folders named Input and Output
 
 Compulsory (DTM, flood delineation) and optional (water bodies, exclusion mask)
-rasters should be placed in the Input folder
+rasters should be placed in the Input folder.
 
-In the script assign the appropriate paths to the Input/Output folders
+The DTM for the sample case can be downloaded at the link provided in the DTM.txt file. 
 
-Adjust the parameters if you like. 
+In the script FLEXTH.py assign the appropriate paths to the Input/Output folders
+
+Adjust the mode parameters (if you feel like). 
 
 Run the script. 
 
-The geotiff raster with estimated water depths (in cm) will be created in the Output folder.
+The geotiff raster with estimated water depths (in cm) and water level (in m) will be created in the Output folder.
 
-Open with a GIS and possibly adjust the limits of the displayed  values (e.g. between 0 and 200 cm),
-add transparency to "0" values. Permanent water bodies (if provided) will be displayed with a dummy 999 water depth
+Open with a GIS and possibly adjust the limits of the displayed  values (e.g. between 0 and 200 cm for the water depth),
+add transparency to "0" values. Permanent water bodies (if provided) will be displayed with a dummy 999 water depth.
