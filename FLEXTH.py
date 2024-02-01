@@ -7,7 +7,7 @@
 # in combination with flood delineations to provide water depth estimates across 
 # the flooded regions. The algorithm requires, as a primary input, a flood delineation
 # map and a DTM. Additional information may include areas excluded from flood mapping 
-# and/or permanent water bodies. All input must be provided via georeferenced raster 
+# and/or permanent water bodies. All input must be provided via binary georeferenced raster 
 # format (GeoTIFF) in a suitable projected reference system.
 # Since water depth is the primary proxy for flood damages, the tool aims to facilitate
 # flood impact assessment over large scales with minimum supervision and quick
@@ -31,6 +31,8 @@ from scipy import signal
 import os
 import time
 from pathlib import Path
+from scipy.spatial import cKDTree
+from skimage import morphology, measure
 
 
 
@@ -56,9 +58,9 @@ from pathlib import Path
 #
 #  output
 #  WD.tif : expanded flood extent with water depth estimates (in cm)
+#  WL.tif : expanded flood extent with water level estimates (in m a.s.l.)
 #
-#
-# all variable with names starting with "param" denote adjustable parameters.
+# All variable with names starting with "param" denote adjustable parameters.
 # The most relevant are listed below whereas throughout the codes there are 
 # additional less sensitive and more operative ones. Testing showed that the 
 # default values are effective and robust in a wide range of settings. 
@@ -67,8 +69,8 @@ from pathlib import Path
 
 
 # set working directories
-input_dir  = Path( '***' )
-output_dir = Path('***' )
+input_dir  = Path( '/home/bettand/Desktop/bettand/GFM_output/GFM_use_cases/2023_09_Greece_EMS/input/' )
+output_dir = Path('/home/bettand/Desktop/bettand/GFM_output/GFM_use_cases/2023_09_Greece_EMS/output/' )
 
  
 #Water level estimation method (options: 'method_A', 'method_B'): 
@@ -80,12 +82,13 @@ param_output_map = "WL_WD"
 
 #parameters
 param_threshold_slope        =  0.05   # S_max : pixels steeper than this are not used to estimate water level
+param_size_gaps_close        =  0.05   # A_g   : up to this size (in km2) gaps in the flood map will be closed
 
-param_border_percentile      =  0.5    # P: assign water level based on the percentile P of the elevation of border cells (valid if Method B is selected)
-param_max_number_neighbors   =  300    # N_max: number of border pixels used to compute water levels for a single continguos flooded area
-param_min_flood_size         =  10     # N_min: if the number of valid border pixels along the border is less than this, WLs are estimated based on the distribution of pixels inside the flooded area
-param_inner_quantile         =  0.98   # P*: for  flooded areas that don't meet the criteria above, uses this percentile of the elevation of flooded pixels to estimate water levels
-param_inverse_dist_exp       =  2      # alpha: inverse distance weighting exponent used to interpolate WL inside flooded areas 
+param_border_percentile      =  0.50    # P: assign water level based on the percentile P of the elevation of border cells (valid if Method B is selected)
+param_max_number_neighbors   =  100     # N_max: number of border pixels used to compute water levels for a single continguos flooded area
+param_min_flood_size         =  100     # N_min: if the number of valid border pixels along the border is less than this, WLs are estimated based on the distribution of pixels inside the flooded area
+param_inner_quantile         =  0.98    # P*: for  flooded areas that don't meet the criteria above, uses this percentile of the elevation of flooded pixels to estimate water levels
+param_inverse_dist_exp       =  2       # alpha: inverse distance weighting exponent used to interpolate WL inside flooded areas 
 
 #param_threshold_distance_factor_1  =  0.5    # a: factor that regulates flood expansion
 #param_threshold_distance_factor_2  =  0.5    # b: exponent that regulates flood expansion
@@ -95,6 +98,13 @@ param_distance_range               =  100    # flooded areas of this size (km2) 
 
 param_WD_star  =  10  # WD* dummy water depth in cm assigned when estimated WD in flooded areas are negative
 
+
+
+####################
+###########################################################################
+## no need to modify anything after this point (unless you have good ideas)
+###########################################################################
+#####################################
 
 
 
@@ -172,6 +182,16 @@ def weighted_quantile(values, percentile, weights=None):
 
 
 
+
+# =============================================================================
+# # Move masked values to the right in each row
+# def justify_2d(arr, mask_value):
+#     mask  =  arr!=mask_value
+#     shifted = np.array([np.concatenate((row[mask[i]], row[~mask[i]])) for i, row in enumerate(arr)])
+#     return shifted
+# 
+# 
+# =============================================================================
 
 ###############
 # main function 
@@ -273,6 +293,33 @@ def flood_processing():
     obswater_binary = cv2.morphologyEx(obswater_binary ,    cv2.MORPH_CLOSE, kernel_1_cross,  iterations = 2 )
     
     
+    ################################
+    #closes small holes in flood map
+    ################################
+    
+    print ('closing small gaps in flood map...')
+    threshold_n_pixels = (param_size_gaps_close*1e6 / L**2).astype(int)
+    
+    binary_map_complementary_flood    = np.logical_not(flood_binary)
+
+    # Label connected components and calculate their areas
+    labeled_map, num_features = measure.label(binary_map_complementary_flood, return_num=True)
+    component_areas = measure.regionprops(labeled_map)
+
+    # Iterate over the component areas and perform morphological operations based on the threshold
+    for component in component_areas:
+        if component.area < threshold_n_pixels:
+            flood_binary    [labeled_map == component.label]    = 1  # Fill small gaps
+            obswater_binary [labeled_map == component.label] = 1
+
+
+
+
+    
+    
+    
+    
+    
     if os.path.isfile(input_dir / 'permanent_water.tif'):
         #same as above
         permanent_water_binary                    = np.copy(permanent_water).astype('uint8')
@@ -285,11 +332,11 @@ def flood_processing():
     
 
     
-    del exclusion, obswater, permanent_water
+    del exclusion, obswater, permanent_water, binary_map_complementary_flood
     
     
     
-    # !!!  opencv with connectivity = 4 has problems in this version of the package !!!!
+    # !!!  opencv with connectivity = 4 has problems in some version of the package !!!!
            
     # Applying cv2.connectedComponents()
     # possibly change the connectivity type 
@@ -332,6 +379,7 @@ def flood_processing():
     dem_border_flood              =   dem * flood_border_binary
       
     
+    flood_border_binary           =  flood_border_binary * flood_border_binary_inner
           
     
     ## AVERAGES THE DEM ALONG THE BORDER 
@@ -366,117 +414,120 @@ def flood_processing():
      
     print('Assigns water elevation to initial flooded areas')
     
-    param_chunk_maxsize          =  1000    # number of cells to process simultaneously
-    param_downsampling           =  100000    # the lower , the less boundary cells will be considered (faster to run but beware in case of massive floods)
-    param_cutoff_distance        =  10000  # further than this distance (in meters) distances are assigned to param_cutoff_value in order to speedup computations when sorting by distance
-    param_cutoff_value           =  9999    # distances are assigned to this value when they exceed  param_cutoff  . This speeds up sorting procedure
- ###  #param_exponential_IDW        =  100     # beta: exponential inverse distance weighting parameter (halving distance in meters)
 
-    
     for i in range (1,len(z_stats)):
         print (f'percent progress:  {int( i/len(z_stats) *100 ) }')
         
-        temp_row_flood   =  row_flood[flood_labels_compressed==i]
-        temp_col_flood   =  col_flood[flood_labels_compressed==i]
-        
-        temp_row_flood_border         =  row_flood_border[flood_borders_labels_compressed==i]
-        temp_col_flood_border         =  col_flood_border[flood_borders_labels_compressed==i]
+
+        temp_position_flood           =  np.stack((row_flood[flood_labels_compressed==i],col_flood[flood_labels_compressed==i]),axis = 1)
+        temp_position_border          =  np.stack((row_flood_border[flood_borders_labels_compressed==i],col_flood_border[flood_borders_labels_compressed==i]),axis = 1)
         temp_dem_border_flood_smooth  =  dem_border_flood_smooth_compressed[flood_borders_labels_compressed==i]
         
-        downsampling_factor = int(1  + len(temp_row_flood_border) * 1/ param_downsampling )
-        
-        #splits the process to increase speed and reduce memory use
-        if len(temp_row_flood) > param_chunk_maxsize:
-            temp_row_flood_split                  =   np.array_split (  temp_row_flood,  len(temp_row_flood) / param_chunk_maxsize + 1 ) 
-            temp_col_flood_split                  =   np.array_split (  temp_col_flood,  len(temp_row_flood) / param_chunk_maxsize + 1 )
-            temp_row_flood_border_reduced         =   temp_row_flood_border[np.arange(0, len(temp_row_flood_border), downsampling_factor)]
-            temp_col_flood_border_reduced         =   temp_col_flood_border[np.arange(0, len(temp_col_flood_border), downsampling_factor)]
-            temp_dem_border_flood_smooth_reduced  =   temp_dem_border_flood_smooth[np.arange(0, len(temp_dem_border_flood_smooth), downsampling_factor)]              
-     
-        else:
-            temp_row_flood_split                  = [temp_row_flood]
-            temp_col_flood_split                  = [temp_col_flood]
-            temp_row_flood_border_reduced         = temp_row_flood_border
-            temp_col_flood_border_reduced         = temp_col_flood_border
-            temp_dem_border_flood_smooth_reduced  = temp_dem_border_flood_smooth
-         
-        
-        temp_dem_border_flood_smooth_reduced    = np.expand_dims(temp_dem_border_flood_smooth_reduced,0)
-         
-        
-        for j in range(len(temp_row_flood_split)):    
+        len_border  = len(temp_position_border)
+ 
+
+        if  len_border < param_min_flood_size: 
+                
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')
+                z_water_level[temp_position_flood[:,0], temp_position_flood[:,1] ]  =  np.nanquantile(dem[temp_position_flood[:,0], temp_position_flood[:,1] ], param_inner_quantile)
+    
+    
+        else:   
+    
             
-    
-            if  np.size(temp_row_flood_border) < param_min_flood_size: 
-                
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore')
-                    z_water_level[temp_row_flood_split[j], temp_col_flood_split[j]]  =  np.nanquantile(dem[temp_row_flood_split[j], temp_col_flood_split[j]], param_inner_quantile)
+            # Build a cKDTree for each set of points
+            #tree_FLOOD  = cKDTree(temp_position_flood)
+            tree_BORDER = cKDTree(temp_position_border)
     
     
-            else:   
-    
-                distances =    cdist( np.array([temp_row_flood_split[j],temp_col_flood_split[j]]).T, np.array([temp_row_flood_border_reduced,temp_col_flood_border_reduced]).T  , metric='euclidean').astype('int32') # <<<<<<<  
+            distances, indices = tree_BORDER.query(temp_position_flood, k=param_max_number_neighbors,workers=10)
 
-                param_number_neighbors = np.min( [param_max_number_neighbors , np.size(temp_row_flood_border)]  )
+
+            distances= distances.astype('float32')
+            distances[distances==0]  = 1
+            indices  = indices.astype('uint32')
+
+
+            if distances.ndim == 1:
+                distances = np.expand_dims(distances, axis=1)
+                indices   = np.expand_dims(indices, axis=1)
+
+            # =============================================================================
+            # # You can also find all points in set2 within a certain distance from a point in set1
+            # # For example, find all points in set2 within a radius of 2 from a point in set1
+            # neighbor_indices = tree_P.query_ball_point(points_A, r=10)
+            # =============================================================================
+
+
+            if param_max_number_neighbors > len_border:
+                indices   = indices  [:, :len_border]
+                distances = distances[:, :len_border]
+
+
             
-    
-                distances[distances==0]                     = 1 
-                distances[distances>int(param_cutoff_distance/L)]    = param_cutoff_value 
-                sorting_order                               = np.argsort(distances, axis=1, kind = 'quicksort') 
-                distances                                   = np.take_along_axis(distances, sorting_order, axis = 1)
-                dem_temp_sort                               = np.take_along_axis(temp_dem_border_flood_smooth_reduced, sorting_order, axis = 1)
-               
-                
-               
-                #####################
-                #####################
-                ## choose the weights
-                #####################
-                #####################
+            #####################
+            #####################
+            ## choose the weights
+            #####################
+            #####################
                 
                 
-                ################################
-                # inverse distance weighting IDW
-                ################################
+            ################################
+            # inverse distance weighting IDW
+            ################################
                 
-                weights  =  1/distances[:, 0:param_number_neighbors].astype('float32')**param_inverse_dist_exp
+            weights  =   1 / (distances ** param_inverse_dist_exp).astype('float32')
+
                 
-                ####################################
-                # exponential distance weighting EDW
-                ####################################
+              
                 
-                #weights  =  np.exp ( -distances[:, 0:param_number_neighbors].astype('float32') * L * np.log(2) / param_exponential_IDW   )
+            ####################################
+            # exponential distance weighting EDW
+            ####################################
+
+            #weights  =  np.exp ( -distances.astype * L * np.log(2) / param_exponential_IDW   )
                 
                
                 
-                ##############################
-                ##############################
-                ## choose WL estimation method
-                ##############################
-                ##############################
+             ##############################
+             ##############################
+             ## choose WL estimation method
+             ##############################
+             ##############################
 
 
-                if param_WL_estimation_method == 'method_A':
-                    ##########
-                    #METHOD A : water level is interpoleated using IDW or EDW weights
-                    ##########
+            if param_WL_estimation_method == 'method_A':
+            #METHOD A : water level is interpoleated using IDW or EDW weights
                     
-                    dem_temp_statistic              =  (  np.sum ( dem_temp_sort[:, 0:param_number_neighbors] * weights  ,axis=1 ) /  np.sum ( weights   ,axis=1)    ).astype('float32')   
                 
-                elif param_WL_estimation_method == 'method_B':
-                    ##########
-                    #METHOD B : water level is a distence-weighted QUANTILE of all closest dem neighboring cells 
-                    ##########
+                dem_temp_statistic    =  (np.sum((temp_dem_border_flood_smooth[indices] * weights).astype('float32'), axis = 1 )  / np.sum( weights , axis = 1 ) ).astype('float32')
+                
+                
+            elif param_WL_estimation_method == 'method_B':
+                #METHOD B : water level is a distence-weighted QUANTILE of all closest dem neighboring cells 
         
-                    dem_temp_statistic              =   weighted_quantile(dem_temp_sort[:, 0:param_number_neighbors], param_border_percentile, weights  =  weights)
                     
+                dem_temp_statistic    =   weighted_quantile(temp_dem_border_flood_smooth[indices], param_border_percentile, weights  =  weights)
+                             
                     
     
     
+            #plotta
+            if False:
+                min_ =np.min(temp_dem_border_flood_smooth) 
+                max_ = np.max(temp_dem_border_flood_smooth)
+                import matplotlib.pyplot as plt
+                plt.scatter(temp_position_flood[:,0], temp_position_flood[:,1], c=dem_temp_statistic, cmap='viridis', marker='s')
+                plt.clim(min_, max_)
+                plt.scatter(temp_position_border[:,0], temp_position_border[:,1], c=temp_dem_border_flood_smooth, cmap='viridis', marker='s')
+                plt.clim(min_, max_)
+    
                 
+    
+    
                 
-                z_water_level[temp_row_flood_split[j], temp_col_flood_split[j]]    =    dem_temp_statistic 
+            z_water_level[temp_position_flood[:,0], temp_position_flood[:,1]]    =    dem_temp_statistic 
     
     
      
@@ -609,7 +660,10 @@ def flood_processing():
     ###############
     ##smoothing WL
     ###############
-    
+
+     
+    print('Smoothing \n')
+           
     
     ## first closes small holes in the flood map and then smooths (only the extended flooded areas)
     
@@ -630,9 +684,7 @@ def flood_processing():
     
 
 
-     
-    print('Smoothing \n')
-           
+    
     param_kern_closing_size     = 3 
     param_closing_iterations    = 2  
     
@@ -660,10 +712,8 @@ def flood_processing():
     
     
         
-    
-    
+
      
-      
     ######
     # WD #
     ######
@@ -671,7 +721,7 @@ def flood_processing():
     
     WD[WD<0] = 0 
     WD[WD > 0]                = WD[WD > 0] + param_WD_star
-    WD[(WD==0) & (flood>0)  ] = param_WD_star
+    WD[(WD==0) & (flood_binary>0)  ] = param_WD_star
     
     
     
@@ -689,7 +739,7 @@ def flood_processing():
     WL                        = ( z_water_level_augmented   ).astype('float32')   
     
     WL[WD > 0]                = WL[WD > 0] + param_WD_star/100
-    WL[(WD==0) & (flood>0)  ] = dem[(WD==0) & (flood>0) ]  + param_WD_star/100
+    WL[(WD==0) & (flood_binary>0)  ] = dem[(WD==0) & (flood_binary>0) ]  + param_WD_star/100
     
     
     
@@ -708,7 +758,7 @@ def flood_processing():
     if param_output_map == "WD" or  param_output_map == "WL_WD" :
     
         with rasterio.open(
-            output_dir / f'WD_{param_WL_estimation_method}_Smax_{param_threshold_slope}_Nmax_{param_max_number_neighbors}_a_{param_inverse_dist_exp}_Dmax_{param_max_propagation_distance}_A12_{param_distance_range}_dsf_{param_downsampling}.tif',
+            output_dir / f'WD_{param_WL_estimation_method}_Smax_{param_threshold_slope}_Nmax_{param_max_number_neighbors}_a_{param_inverse_dist_exp}_Dmax_{param_max_propagation_distance}_A12_{param_distance_range}.tif',
             mode="w",
             driver="GTiff",
             compress='lzw',
@@ -726,7 +776,7 @@ def flood_processing():
     if param_output_map == "WL" or  param_output_map == "WL_WD" :
     
         with rasterio.open(
-            output_dir / f'WL_{param_WL_estimation_method}_Smax_{param_threshold_slope}_Nmax_{param_max_number_neighbors}_a_{param_inverse_dist_exp}_Dmax_{param_max_propagation_distance}_A12_{param_distance_range}_dsf_{param_downsampling}.tif',
+            output_dir / f'WL_{param_WL_estimation_method}_Smax_{param_threshold_slope}_Nmax_{param_max_number_neighbors}_a_{param_inverse_dist_exp}_Dmax_{param_max_propagation_distance}_A12_{param_distance_range}.tif',
             mode="w",
             driver="GTiff",
             compress='lzw',
