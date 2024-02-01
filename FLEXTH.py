@@ -69,8 +69,8 @@ from skimage import morphology, measure
 
 
 # set working directories
-input_dir  = Path( '/home/bettand/Desktop/bettand/GFM_output/GFM_use_cases/2023_09_Greece_EMS/input/' )
-output_dir = Path('/home/bettand/Desktop/bettand/GFM_output/GFM_use_cases/2023_09_Greece_EMS/output/' )
+input_dir  = Path( '/.../..../input' )
+output_dir = Path( '/.../..../output' )
 
  
 #Water level estimation method (options: 'method_A', 'method_B'): 
