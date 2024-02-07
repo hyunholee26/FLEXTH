@@ -1,9 +1,18 @@
 Wherever you like create two folders named Input and Output
 
-Compulsory (DTM, flood delineation) and optional (water bodies, exclusion mask)
-rasters should be placed in the Input folder.
+Compulsory: 
+-DTM (dtm.tif)
+-flood delineation  (flood.tif)
+
+Optional:
+-water bodies     (permanent_water.tif)
+-exclusion mask   (exclusion.tif)
+
+The above rasters should be placed in the Input folder.
 
 The DTM for the sample case can be downloaded at the link provided in the DTM.txt file. 
+
+
 
 In the script FLEXTH.py assign the appropriate paths to the Input/Output folders
 
