@@ -1,3 +1,7 @@
+##########################################
+### da usare con environment : conda_py_39
+##########################################
+
 # script that takes in input a raster flood map and a dtm. 
 # it brings the dtm to the same extent and resolution (with matching pixels) as the flood map
 
@@ -16,18 +20,23 @@
 
 from osgeo import gdal
 import glob, os
+import logging
 import rasterio
+from pathlib import Path
 
 
 #SET INPUT-OUTUT
-input_DTM  = '***'
-output_DTM = '***'
+input_DTM  = Path('/***/***/dtm_in.tif')
+output_DTM = Path('/***/***/dtm_out.tif')
 
 
-input_flood_delineation = '***'
+input_flood_delineation = Path('/***/***/flood.tif')
 
 
-#DOES STUFF
+
+
+###############################################################################
+#DOES ITS STUFF
 
 flood_dataset = rasterio.open(input_flood_delineation)
 flood_array   = flood_dataset.read(1)
@@ -83,15 +92,14 @@ dtm_dataset.close()
 
 from osgeo import gdal, osr, ogr
 import os
-
-
+from pathlib import Path
 
 #SET INPUT-OUTUT
-input_DTM  = '***'
-output_DTM = '***'
+input_DTM  = Path('/***/***/dtm_in.tif')
+output_DTM = Path('/***/***/dtm_out.tif')
 
 
-input_flood_delineation = '***'
+input_flood_delineation = Path('/***/***/flood.tif')
 
 
 
