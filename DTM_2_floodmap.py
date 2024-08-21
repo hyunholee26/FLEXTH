@@ -58,8 +58,8 @@ input_proj       = dtm_dataset.crs.wkt
 output_proj      = flood_dataset.crs.wkt
 
 
-gdal.Warp(output_DTM, 
-          input_DTM, 
+gdal.Warp(str(output_DTM), 
+          str(input_DTM), 
           outputBounds=[minX, minY, maxX, maxY],
           cropToCutline    = True,
           outputBoundsSRS = output_proj, 
@@ -124,8 +124,8 @@ output_proj = flood_dataset_GDAL.GetSpatialRef()
 
 
 
-gdal.Warp(output_DTM, 
-          input_DTM, 
+gdal.Warp(str(output_DTM), 
+          str(input_DTM), 
           outputBounds=[minX, minY, maxX, maxY],
           outputBoundsSRS = output_proj, 
           warpMemoryLimit= 5000,
