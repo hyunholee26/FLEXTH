@@ -1,15 +1,45 @@
 ##########################################
 ### da usare con environment : conda_py_39
 ##########################################
-
-# script that takes in input a raster flood map and a dtm. 
-# it brings the dtm to the same extent and resolution (with matching pixels) as the flood map
-
+#
+# This script easily help you resample/reproject your input data in a suitable format for FLEXTH
+#
+# The minimum input for FLEXTH is:
+# 1. a binary (i.e. 1 - 0) raster map delineating flooded areas
+# 2. topographical data in the form of a DTM (or a DEM if DTM is not available)
+#
+# Additional input may include:
+# 3. a binary water body mask which delineates all permanent/seasonal water bodies
+# 4. a binary no-data mask which delineates all areas where flood mapping was not performed
+#
+#
+#
+# The input raster files of FLEXTH must:
+# 1. be in the same projected coordinate reference system
+# 2. share the same extent and have the same resolution (i.e. the pixels must match)
+#
+#
+# If you have a flood extent map in raster format (in a projected reference system) and a generic DTM for your area,
+# this script resamples and reprojects your DTM to the extent, resolution and reference system of your input flood map. 
+# Your flood map and the new DTM can then be used as inputs to FLEXTH.
+#
+# The script can be used with any other raster (not just with DTM). For example, it can be used for your water bodies and/or no-data masks.
+# Just be careful to choose the appropriate resampling method by setting the variable "continuous_input" to True in case you are processing
+# a continuous variable (DTM), or to False if you are processing a categorical variable (e.g. no-data or water bodies mask).
+#
+#
+# INPUT:
+# 1. input_flood_delineation:  you reference flood extent 
+# 2. input_raster           :  the raster you want to resample/reproject 
+#
+# OUTPUT
+# 1. output_raster          :  your processed input raster
+#
 
 #two versions: version 1 uses gdal and rasterio --- version 2 uses  only  gdal
 
 
-#  !!! INPUT FLOOD MAP RASTER MUST BE IN A PROJECTED REFERENCE SYSTEM
+#   INPUT FLOOD MAP RASTER MUST BE IN A PROJECTED REFERENCE SYSTEM
 
 
 ##########
@@ -24,24 +54,34 @@ import logging
 import rasterio
 from pathlib import Path
 
+gdal.UseExceptions()
+
+
+# If you input file is a continuous variable (e.g. DTM), select "True".
+# If it is a discrete (i.e. categorical) variable, select "False"
+
+continuous_input = False
+
 
 #SET INPUT-OUTUT
-input_DTM  = Path('/***/***/dtm_in.tif')
-output_DTM = Path('/***/***/dtm_out.tif')
+input_raster  = Path('/home/bettand/Desktop/storage_bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/gfm/input/obswater.tif')
+output_raster = Path('/home/bettand/Desktop/storage_bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/gfm/input/obswater_processed_ZSTD.tif')
 
 
-input_flood_delineation = Path('/***/***/flood.tif')
+input_flood_delineation = Path('/home/bettand/Desktop/storage_bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/gfm/input/flood.tif')
 
 
 
 
-###############################################################################
-#DOES ITS STUFF
+############
+#DOES  STUFF
+############
+
 
 flood_dataset = rasterio.open(input_flood_delineation)
 flood_array   = flood_dataset.read(1)
 
-dtm_dataset = rasterio.open(input_DTM)
+raster_dataset = rasterio.open(input_raster)
 
 
 transform = flood_dataset.transform
@@ -54,12 +94,17 @@ maxX= minX + Dx*flood_array_ncol
 minY= maxY + Dy*flood_array_nrows
 
 
-input_proj       = dtm_dataset.crs.wkt
+input_proj       = raster_dataset.crs.wkt
 output_proj      = flood_dataset.crs.wkt
 
 
-gdal.Warp(str(output_DTM), 
-          str(input_DTM), 
+if continuous_input == True:
+    resampling_method = 'bilinear'# other options: 'average', 'cubic', 'lanczos' ... 
+elif continuous_input == False:
+    resampling_method = 'mode'   # other options: 'nearest' ...
+
+gdal.Warp(str(output_raster), 
+          str(input_raster), 
           outputBounds=[minX, minY, maxX, maxY],
           cropToCutline    = True,
           outputBoundsSRS = output_proj, 
@@ -68,43 +113,52 @@ gdal.Warp(str(output_DTM),
           dstSRS= output_proj, 
           xRes=Dx,
           yRes=Dy, 
-          resampleAlg='bilinear',
+          resampleAlg= resampling_method,
           targetAlignedPixels = False,
-          creationOptions = ["COMPRESS=LZW", "BIGTIFF=YES", "TILED=YES"]
+          creationOptions = ["COMPRESS=ZSTD", "BIGTIFF=YES", "TILED=YES"]    # compression options: ZSTD, DEFLATE, LZW
           )
 
 
 
 
 flood_dataset.close()
-dtm_dataset.close()
+raster_dataset.close()
 
 
 
 
 
-
-##########
+#############################
+#######################################
 #VERSION 2
-##########
-
+######################################
+#########################################################
 
 
 from osgeo import gdal, osr, ogr
 import os
 from pathlib import Path
+gdal.UseExceptions()
+
+
+# If you input file is a continuous variable (e.g. DTM), select "True".
+# If it is a discrete (i.e. categorical) variable, select "False"
+
+continuous_input = True
+
 
 #SET INPUT-OUTUT
-input_DTM  = Path('/***/***/dtm_in.tif')
-output_DTM = Path('/***/***/dtm_out.tif')
+input_raster  = Path('/home/bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/congo_dtm_clip.tif')
+output_raster = Path('/home/bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/congo_reproject.tif')
 
 
-input_flood_delineation = Path('/***/***/flood.tif')
+input_flood_delineation = Path('/home/bettand/Documents/GFM_files_transfer/temp/congo/elaborazioni_mie/congo.tif')
 
 
 
-flood_dataset_GDAL = gdal.Open(input_flood_delineation)
-dem_dataset_GDAL = gdal.Open(input_DTM)
+
+flood_dataset_GDAL = gdal.Open(str(input_flood_delineation))
+dem_dataset_GDAL = gdal.Open(str(input_raster))
 
 
 
@@ -124,8 +178,16 @@ output_proj = flood_dataset_GDAL.GetSpatialRef()
 
 
 
-gdal.Warp(str(output_DTM), 
-          str(input_DTM), 
+if continuous_input == True:
+    resampling_method = 'bilinear'# other options: 'average', 'cubic', 'lanczos' ... 
+elif continuous_input == False:
+    resampling_method = 'mode'   # other options: 'nearest' ...
+
+
+
+
+gdal.Warp(str(output_raster), 
+          str(input_raster), 
           outputBounds=[minX, minY, maxX, maxY],
           outputBoundsSRS = output_proj, 
           warpMemoryLimit= 5000,
@@ -133,7 +195,7 @@ gdal.Warp(str(output_DTM),
           dstSRS= output_proj, 
           xRes=Dx,
           yRes=-Dy, 
-          resampleAlg='bilinear',
+          resampleAlg= resampling_method,
           #targetAlignedPixels = True,
           creationOptions = ["COMPRESS=LZW", "BIGTIFF=YES", "TILED=YES"])
 
